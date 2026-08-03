@@ -1,66 +1,89 @@
-# AWS Hybrid Cloud Security Architecture with FortiGate NGFW
-### 🛡️ Cyber Security Capstone Project | Lalith
+# AWS Cloud Security & Networking Infrastructure — FortiGate Deployment
+
+This repository contains the complete Infrastructure as Code (IaC) configuration using Terraform to design, deploy, and verify a secure, multi-AZ cloud network architecture in the Sydney (`ap-southeast-2`) region. The environment features a custom VPC, segmented public/private subnets using single-module boolean conditional architecture patterns, and integrations for a FortiGate Next-Generation Firewall (NGFW).
+
+## Architectural Specifications & Requirements
+
+### 1. Network Setup & VPC Design
+* Custom VPC deployed with CIDR block `10.160.0.0/16`.
+* Connected to an external Internet Gateway (IGW) for public edge routing.
+* The default regional VPC is completely bypassed/isolated.
+
+### 2. Subnet Matrix Configuration
+All subnets are instantiated dynamically via a loop structure passing explicit parameters:
+* **LAN10** (`10.160.10.0/24`) – Public Subnet (Availability Zone `a`)
+* **LAN20** (`10.160.20.0/24`) – Private Subnet (Availability Zone `a`)
+* **LAN30** (`10.160.30.0/24`) – Private Subnet (Availability Zone `a`)
+* **LAN40** (`10.160.40.0/24`) – Private Subnet (Availability Zone `b`)
+* **LAN50** (`10.160.50.0/24`) – Private Subnet (Availability Zone `c`)
+
+### 3. Route Tables & Border Security
+* **Public Route Table**: Bound to LAN10; handles edge traffic routing straight to the Internet Gateway (`0.0.0.0/0`).
+* **Private Route Table**: Bound to LAN20, LAN30, LAN40, and LAN50; designated explicitly as the VPC's main route table.
+* **Management Security Group**: Configured to process management traffic protocols.
+* **Elastic Network Interfaces (ENIs)**: Created for private segments with **Source/Destination Checks Disabled** to permit true inline firewall inspection.
 
 ---
 
-## 👨‍💻 Project Overview
-This repository contains the design, implementation, and automation blueprints for a secure, highly available network on AWS using a **FortiGate Next-Generation Firewall (NGFW)**. 
+## Directory Structure
 
-Developed by **Lalith** for **CCC603: Cyber Security in Cloud (30 Credits)**, this capstone project demonstrates how to enforce enterprise compliance (**NIST CSF, ISO 27001, CIS Benchmarks**) using **Terraform (IaC)**, **Ansible CLI**, and **AWS Lambda** serverless cost controls.
-
----
-
-## 🏗️ Core Network Topology (Sydney Region: `ap-southeast-2`)
-
-* **Custom VPC:** `Lalith-VPC` configured with a private `10.160.0.0/16` IP block.
-* **Perimeter Gateway:** `Lalith_IGW` attached to the VPC for managed public internet access.
-* **Hardened Perimeter:** Default AWS VPC deleted to eliminate unmonitored baseline routes.
-
-### 📁 Segmented Subnet Infrastructure
-* **LAN10 (`10.160.10.0/24`):** Public DMZ subnet housing public-facing firewall interfaces.
-* **LAN20 & LAN30 (`10.160.20.0/24`, `10.160.30.0/24`):** Private workload zones in **AZ-a**.
-* **LAN40 & LAN50 (`10.160.40.0/24`, `10.160.50.0/24`):** Private zones in **AZ-b & AZ-c** for data continuity.
-
-### 🛣️ Routing & Security Group Rules
-* **`Public_Route_Table`:** Points default `0.0.0.0/0` traffic directly out through `Lalith_IGW`.
-* **`Private_Route_Table`:** Set as the Main Route Table. Forces all private workload traffic directly to the **FortiGate Internal ENI** for absolute security scrubbing.
-* **Security Constraints:** **Source/Destination Check disabled** on all firewall ENIs. Administrative access locked down using `Management_SG`.
-
----
-
-## ⚙️ DevOps Automation & Financial Governance
-
-### 🚀 1. Infrastructure as Code (Terraform)
-* Pre-scripts the automatic creation of the VPC, subnets, route table attachments, ENIs, and the FortiGate instance (`t3.medium`).
-* *[Placeholder: Link to `/terraform` folder scripts]*
-
-### 🛠️ 2. Configuration Management (Ansible CLI)
-* Establishes secure remote **SSH sessions** directly into FortiOS to configure security policies.
-* Automates a midnight **Cron Job** to extract the firewall state and backup the file to an encrypted **AWS S3 Bucket**.
-
-### ⚡ 3. Serverless Cost Controls (AWS Lambda)
-* A Python-based **AWS Lambda function** triggered by EventBridge automatically starts the firewall instance at **9:00 AM NZT** and stops it at **5:00 PM NZT** daily to minimize idle cloud resource costs.
-
----
-
-## 🔬 Engineering Reflections & Insights
-
-* **AZ Boundaries:** `LAN40` (AZ-b) and `LAN50` (AZ-c) cannot attach directly to the primary FortiGate instance because AWS EC2 instances can only hold network interfaces (ENIs) residing in their **exact same Availability Zone** (AZ-a).
-* **Multi-AZ Continuity:** Production workloads require an **Active-Passive clustered pair** split across distinct zones. If a zone fails, the standby peer updates the VPC route table targets via AWS API calls in **< 15 seconds (RTO Target)** with **0 configuration data loss (RPO Target)**.
-
----
-
-## 📁 Repository Map
 ```text
-├── terraform/               # IaC scripts for custom VPC topography & subnets
-│   ├── main.tf              
-│   └── variables.tf
-├── ansible/                 # Playbooks for automated FortiOS backups
-│   ├── inventory/hosts.ini  
-│   └── backup_playbook.yml  
-├── lambda/                  # Serverless cost schedules (9 AM - 5 PM NZT)
-│   └── instance_scheduler.py
-└── documentation/
-    ├── Executive_Report.pdf  # 3,000-Word Compliance & Risk Report
-    └── Demonstration.mp4     # 5-7 minute video walkthrough walkthrough
+├── main.tf                 # Primary deployment orchestrator (Loops, SGs, ENIs, EC2)
+├── variables.tf            # Top-level root environment variable definitions
+├── terraform.tfvars        # Input variable assignment mapping parameters
+├── providers.tf            # Terraform and AWS provider engine declarations
+└── modules/
+    ├── vpc/
+    │   ├── main.tf        # Base VPC and core gateway resources
+    │   ├── variables.tf   # VPC boundary inputs
+    │   └── outputs.tf     # Network boundary IDs passed up to root layer
+    └── subnets/
+        ├── main.tf        # Centralized subnet definition using conditional maps
+        └── variables.tf   # Single-module subnet matrix configuration inputs
 ```
+
+---
+
+## Local Deployment & Verification Workflow
+
+### 1. Set Up Environment Authentication
+Because this project utilizes protected sandbox execution contexts (such as AWS Academy), temporary credentials must be explicitly mapped to override execution restrictions. Download your session variables and input them directly into your shell environment:
+
+```bash
+export AWS_ACCESS_KEY_ID="ASIA..."
+export AWS_SECRET_ACCESS_KEY="..."
+export AWS_SESSION_TOKEN="IQoJ..."
+```
+
+Verify your authentication identity bounds before processing deployment cycles:
+```bash
+aws sts get-caller-identity
+```
+
+### 2. Run the Terraform Lifecycle Engine
+Navigate directly into the root folder structure and execute initialization steps:
+
+```bash
+# Initialize project workspace and download external providers
+terraform init
+
+# Generate a blueprint plan to verify resources before creation
+terraform plan
+
+# Apply and execute the target deployment state onto the cloud region
+terraform apply --auto-approve
+```
+
+---
+
+## Architecture Reflection & Technical Review
+
+### 1. Why LAN40 and LAN50 Cannot Attach to the Same FortiGate Instance
+AWS EC2 structural rules dictate that an elastic interface (ENI) can only be attached to an EC2 instance if **both resources reside inside the exact same Availability Zone (AZ)**. 
+
+Because the primary FortiGate firewall compute resource is launched inside **AZ `a`** to properly bridge network paths for LAN20 and LAN30, it is physically impossible to map or mount network attachments directly to interfaces residing within LAN40 (**AZ `b`**) or LAN50 (**AZ `c`**). 
+
+### 2. High-Availability (HA) Best Practices for Multi-AZ Firewalls
+To ensure operational survivability and fault tolerance for multi-AZ workloads, the following steps are required:
+* Deploy a clustered **Active-Passive or Active-Active Firewall Dual Pair** spanning across separate operational availability zones (e.g., Firewall-A in AZ-A, Firewall-B in AZ-B).
+* Utilise **AWS Transit Gateway (TGW)** or an **AWS Route 53 Network Load Balancer** sitting ahead of the firewall cluster. This allows traffic routing states to automatically shift across independent AZ boundaries without service drops if a single physical data center cluster experiences an outage.
